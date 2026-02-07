@@ -52,6 +52,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
@@ -66,6 +67,13 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Get current version
+        id: current
+        run: |
+          CURRENT=$(node -p "require('./package.json').version")
+          echo "version=$CURRENT" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT"
+
       - name: Get next version
         id: semver
         uses: ietf-tools/semver-action@v1
@@ -75,10 +83,25 @@ jobs:
           majorList: BREAKING CHANGE, breaking change
           minorList: feat, feature
           patchList: fix, bugfix, perf, refactor, docs, chore, test
-          fallbackTag: '0.1.0'
+          fallbackTag: 'v0.1.0'
+
+      - name: Check if version needs bump
+        id: check
+        run: |
+          CURRENT="${{ steps.current.outputs.version }}"
+          NEXT="${{ steps.semver.outputs.next }}"
+          echo "Current: $CURRENT"
+          echo "Next: $NEXT"
+          if [ "$CURRENT" == "$NEXT" ]; then
+            echo "No version bump needed"
+            echo "bump=false" >> $GITHUB_OUTPUT
+          else
+            echo "Version bump needed: $CURRENT -> $NEXT"
+            echo "bump=true" >> $GITHUB_OUTPUT
+          fi
 
       - name: Update package.json version
-        if: steps.semver.outputs.next != steps.semver.outputs.current
+        if: steps.check.outputs.bump == 'true'
         run: |
           npm version ${{ steps.semver.outputs.next }} --no-git-tag-version
           git config user.name "github-actions[bot]"
@@ -88,13 +111,13 @@ jobs:
           git push
 
       - name: Create Git tag
-        if: steps.semver.outputs.next != steps.semver.outputs.current
+        if: steps.check.outputs.bump == 'true'
         run: |
           git tag v${{ steps.semver.outputs.next }}
           git push origin v${{ steps.semver.outputs.next }}
 
       - name: Create GitHub Release
-        if: steps.semver.outputs.next != steps.semver.outputs.current
+        if: steps.check.outputs.bump == 'true'
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ steps.semver.outputs.next }}
