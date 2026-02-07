@@ -1,0 +1,21 @@
+{
+  "types": [
+    { "type": "feat", "section": "Features", "bump": "minor" },
+    { "type": "feature", "section": "Features", "bump": "minor" },
+    { "type": "fix", "section": "Bug Fixes", "bump": "patch" },
+    { "type": "bugfix", "section": "Bug Fixes", "bump": "patch" },
+    { "type": "perf", "section": "Performance Improvements", "bump": "patch" },
+    { "type": "revert", "section": "Reverts", "bump": "patch" },
+    { "type": "docs", "section": "Documentation", "bump": "patch" },
+    { "type": "style", "section": "Styles", "bump": "patch" },
+    { "type": "chore", "section": "Miscellaneous Chores", "bump": "patch" },
+    { "type": "refactor", "section": "Code Refactoring", "bump": "patch" },
+    { "type": "test", "section": "Tests", "bump": "patch" },
+    { "type": "build", "section": "Build System", "bump": "patch" },
+    { "type": "ci", "section": "CI/CD", "bump": "patch" }
+  ],
+  "commitUrlFormat": "https://github.com/{{owner}}/{{repository}}/commit/{{hash}}",
+  "compareUrlFormat": "https://github.com/{{owner}}/{{repository}}/compare/{{previousTag}}...{{currentTag}}",
+  "issueUrlFormat": "https://github.com/{{owner}}/{{repository}}/issues/{{id}}",
+  "userUrlFormat": "https://github.com/{{user}}"
+}

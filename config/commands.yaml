@@ -1,0 +1,28 @@
+# Maps message prefixes to CLI configurations.
+# binary supports ${VAR} placeholders resolved from env at startup.
+commands:
+  - prefix: "claude"
+    binary: "${CLI_CLAUDE}"
+    args: ["--verbose"]  # Get full output
+    promptFlag: "-p"
+    sessionIdFlag: "--session-id"  # Create session (first call)
+    resumeFlag: "--resume"         # Resume session (subsequent calls)
+    mode: one-shot
+    envelope: true
+    description: "Run Claude Code"
+
+  - prefix: "kimi"
+    binary: "${CLI_KIMI}"
+    args: ["--quiet"]
+    promptFlag: "-p"
+    sessionFlag: "-S"
+    mode: one-shot
+    envelope: true
+    description: "Run Kimi Code"
+
+  - prefix: "run"
+    binary: "bash.exe"
+    args: ["-c"]
+    mode: one-shot
+    envelope: false
+    description: "Run a bash command"

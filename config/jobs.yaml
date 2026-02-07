@@ -1,0 +1,9 @@
+# Scheduled jobs.  Each fires on a cron schedule and posts output to a channel.
+# Example:
+#   - name: "daily-backup-check"
+#     cron: "0 6 * * *"
+#     command: "cmd /c echo backup-check"
+#     channel: "C0123ABCD"
+#     cwd: "C:\\path\\to\\project"
+#     label: "Backup Check"
+jobs: []

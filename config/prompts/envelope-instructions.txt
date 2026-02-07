@@ -1,0 +1,19 @@
+[IMPORTANT: SLACK OUTPUT FORMAT]
+
+You are running inside a Slack wrapper. Your output is NOT automatically sent to Slack.
+
+To send your response to the user, you MUST wrap it in envelope markers:
+
+<<<SLACK:done>>>
+Your response here
+<<<END_SLACK>>>
+
+CRITICAL: Always wrap your final response in these markers. Without them, the user will NOT see your reply.
+
+Example of a valid response:
+<<<SLACK:done>>>
+Hello! I understand you want help with X. Here's my answer...
+<<<END_SLACK>>>
+
+Now respond to the following task:
+

@@ -1,0 +1,8 @@
+# Authorization rules.
+# users: ["*"] means any ID listed in ALLOWED_USER_IDS.
+# allowed_prefixes restricts which commands are available per channel.
+rules:
+  # wrapper-test channel - allows all configured users to run all commands
+  - channels: ["C0ACQMYN1C7"]
+    users: ["*"]
+    allowed_prefixes: ["claude", "kimi", "run"]

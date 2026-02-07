@@ -1,0 +1,30 @@
+{
+  "name": "slack-cli-wrapper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "test": "node --import tsx --test test/unit/processHandle.test.ts test/integration/integration.test.ts test/e2e/e2e-exact-user-command.test.ts",
+    "test:unit": "node --import tsx --test test/unit/processHandle.test.ts",
+    "test:integration": "node --import tsx --test test/integration/integration.test.ts test/integration/slack-integration.test.ts",
+    "test:e2e": "node --import tsx --test test/e2e/e2e-exact-user-command.test.ts test/e2e/e2e-session-lifecycle.test.ts",
+    "clean": "node -e \"require('child_process').execSync('powershell -Command \\\"Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force\\\" 2>&1 || true'); console.log('All node processes killed');\"",
+    "restart": "npm run clean && sleep 2 && npm run dev"
+  },
+  "dependencies": {
+    "@slack/bolt": "^3.17.1",
+    "dotenv": "^16.4.5",
+    "js-yaml": "^4.1.0",
+    "node-cron": "^4.2.1",
+    "node-pty": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.11.5",
+    "tsx": "^4.4.1",
+    "typescript": "^5.3.3"
+  }
+}
