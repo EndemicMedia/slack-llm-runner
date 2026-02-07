@@ -74,16 +74,69 @@ jobs:
           echo "version=$CURRENT" >> $GITHUB_OUTPUT
           echo "Current version: $CURRENT"
 
-      - name: Get next version
+      - name: Calculate next version
         id: semver
-        uses: ietf-tools/semver-action@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: ${{ github.ref_name }}
-          majorList: BREAKING CHANGE, breaking change
-          minorList: feat, feature
-          patchList: fix, bugfix, perf, refactor, docs, chore, test
-          fallbackTag: 'v0.1.0'
+        run: |
+          CURRENT="${{ steps.current.outputs.version }}"
+          
+          # Get commits since last tag (or all commits if no tags)
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          
+          if [ -z "$LAST_TAG" ]; then
+            echo "No previous tags found, analyzing all commits"
+            COMMITS=$(git log --pretty=format:"%s" HEAD)
+          else
+            echo "Last tag: $LAST_TAG"
+            COMMITS=$(git log --pretty=format:"%s" ${LAST_TAG}..HEAD)
+          fi
+          
+          # Determine bump type
+          BUMP="none"
+          
+          # Check for breaking changes (major)
+          if echo "$COMMITS" | grep -qE "^[a-z]+(\(.+\))?!:|BREAKING CHANGE"; then
+            BUMP="major"
+          # Check for features (minor)
+          elif echo "$COMMITS" | grep -qE "^feat(\(.+\))?:|^feature(\(.+\))?:"; then
+            BUMP="minor"
+          # Check for fixes (patch)
+          elif echo "$COMMITS" | grep -qE "^(fix|bugfix|perf|refactor|docs|chore|test)(\(.+\))?:"; then
+            BUMP="patch"
+          fi
+          
+          echo "Bump type: $BUMP"
+          
+          # Calculate next version
+          if [ "$BUMP" == "none" ]; then
+            NEXT="$CURRENT"
+          else
+            # Parse current version (remove 'v' prefix if present)
+            VERSION=${CURRENT#v}
+            MAJOR=$(echo $VERSION | cut -d. -f1)
+            MINOR=$(echo $VERSION | cut -d. -f2)
+            PATCH=$(echo $VERSION | cut -d. -f3)
+            
+            case $BUMP in
+              major)
+                MAJOR=$((MAJOR + 1))
+                MINOR=0
+                PATCH=0
+                ;;
+              minor)
+                MINOR=$((MINOR + 1))
+                PATCH=0
+                ;;
+              patch)
+                PATCH=$((PATCH + 1))
+                ;;
+            esac
+            
+            NEXT="${MAJOR}.${MINOR}.${PATCH}"
+          fi
+          
+          echo "Next version: $NEXT"
+          echo "next=$NEXT" >> $GITHUB_OUTPUT
+          echo "bump=$BUMP" >> $GITHUB_OUTPUT
 
       - name: Check if version needs bump
         id: check
