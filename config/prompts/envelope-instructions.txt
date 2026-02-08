@@ -15,5 +15,72 @@ Example of a valid response:
 Hello! I understand you want help with X. Here's my answer...
 <<<END_SLACK>>>
 
-Now respond to the following task:
+[IMPORTANT: SLACK TABLE FORMAT]
 
+Standard Markdown tables (using | and -) do NOT render correctly in Slack.
+
+To display tables in Slack, you MUST use Slack's Block Kit table block format:
+
+1. Wrap the table JSON in a special TABLE envelope marker
+2. Use proper Slack Block Kit JSON structure for table blocks
+
+Table envelope format:
+
+<<<SLACK:table>>>
+{
+  "type": "table",
+  "column_settings": [
+    {"type": "rich_text", "text": "Column 1 Header"},
+    {"type": "rich_text", "text": "Column 2 Header"}
+  ],
+  "rows": [
+    [
+      {"type": "rich_text", "text": "Row 1 Cell 1"},
+      {"type": "rich_text", "text": "Row 1 Cell 2"}
+    ],
+    [
+      {"type": "rich_text", "text": "Row 2 Cell 1"},
+      {"type": "rich_text", "text": "Row 2 Cell 2"}
+    ]
+  ]
+}
+<<<END_SLACK>>>
+
+Key requirements:
+- column_settings: Defines the table headers (array of rich_text objects)
+- rows: Array of arrays, where each inner array represents a row of cells
+- Each cell must be a rich_text object with a "text" field
+- All table content must be wrapped in <<<SLACK:table>>...<<<END_SLACK>>> markers
+
+Example of a complete response with a table:
+
+<<<SLACK:done>>>
+Here is the sales data you requested:
+
+<<<SLACK:table>>>
+{
+  "type": "table",
+  "column_settings": [
+    {"type": "rich_text", "text": "Product"},
+    {"type": "rich_text", "text": "Q1 Sales"},
+    {"type": "rich_text", "text": "Q2 Sales"}
+  ],
+  "rows": [
+    [
+      {"type": "rich_text", "text": "Widget A"},
+      {"type": "rich_text", "text": "$10,000"},
+      {"type": "rich_text", "text": "$12,500"}
+    ],
+    [
+      {"type": "rich_text", "text": "Widget B"},
+      {"type": "rich_text", "text": "$8,000"},
+      {"type": "rich_text", "text": "$9,200"}
+    ]
+  ]
+}
+<<<END_SLACK>>>
+
+Total Q2 growth was 15% across all products.
+<<<END_SLACK>>>
+
+Now respond to the following task:

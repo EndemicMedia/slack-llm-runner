@@ -11,8 +11,9 @@
     "test:unit": "node --import tsx --test test/unit/processHandle.test.ts",
     "test:integration": "node --import tsx --test test/integration/integration.test.ts test/integration/slack-integration.test.ts",
     "test:e2e": "node --import tsx --test test/e2e/e2e-exact-user-command.test.ts test/e2e/e2e-session-lifecycle.test.ts",
-    "clean": "node -e \"require('child_process').execSync('powershell -Command \\\"Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force\\\" 2>&1 || true'); console.log('All node processes killed');\"",
-    "restart": "npm run clean && sleep 2 && npm run dev"
+    "kill": "node scripts/kill-project-processes.js",
+    "predev": "npm run kill",
+    "restart": "npm run kill && sleep 2 && npm run dev"
   },
   "dependencies": {
     "@slack/bolt": "^3.17.1",
