@@ -23,6 +23,13 @@ export interface OutputRouterOptions {
   threadTs: string;
   /** true → envelope mode; false → full-output mode */
   envelope: boolean;
+  /**
+   * When 'json', the router runs in *capture mode*: nothing is streamed to
+   * Slack; stdout is buffered verbatim for a caller to parse after exit.
+   * Deliberately generic (not mail-specific) so any future JSON-output job
+   * type can reuse the same seam.
+   */
+  outputFormat?: string;
   reporter: SlackReporter;
   envelopeConfig: { activationDelayMs: number; unclosedTimeoutMs: number };
   streamConfig:   { flushIntervalMs: number; maxCharsPerMessage: number };
@@ -38,11 +45,18 @@ export class OutputRouter {
   readonly logWriter: LogWriter;
   private parser:   EnvelopeParser | null = null;
   private streamer: FullStreamer  | null = null;
+  /** Capture mode only: buffered stdout, fed via captureStdout() */
+  private captureBuffer = '';
+  /** True when this router is in capture mode (outputFormat === 'json') */
+  readonly capture: boolean;
 
   constructor(private readonly opts: OutputRouterOptions) {
     this.logWriter = new LogWriter(opts.sessionId);
+    this.capture   = opts.outputFormat === 'json';
 
-    if (opts.envelope) {
+    if (this.capture) {
+      // Capture mode: no Slack track at all — Track 1 (log) still gets everything.
+    } else if (opts.envelope) {
       this.parser = new EnvelopeParser(opts.envelopeConfig);
       this.parser.on('envelope', (msg: EnvelopeMessage) => void this.onEnvelope(msg));
     } else {
@@ -70,6 +84,23 @@ export class OutputRouter {
     this.logWriter.write(data);   // Track 1 – always
     this.parser?.push(data);      // Track 2a – envelope mode
     this.streamer?.push(data);    // Track 2b – full-output mode
+    // Track 2c – capture mode: nothing here on purpose. Capture-mode stdout
+    // arrives via captureStdout() from a stdout-only source, so stderr that
+    // reaches push() is logged but never enters the JSON buffer.
+  }
+
+  /**
+   * Capture mode only: appends a stdout-only chunk to the JSON buffer.
+   * Callers must NOT route stderr here.
+   */
+  captureStdout(data: string): void {
+    if (!this.capture) return;
+    this.captureBuffer += data;
+  }
+
+  /** Capture mode only: the raw buffered stdout collected so far. */
+  getCapturedStdout(): string {
+    return this.captureBuffer;
   }
 
   /**

@@ -12,6 +12,15 @@ const logger = createLogger('ProcessHandle');
  */
 export interface ProcessHandle {
   onData(cb: (data: string) => void): void;
+  /**
+   * Optional stdout-only subscription. Present only on handles that keep the
+   * two streams physically separate (child_process). Used by capture mode,
+   * where stderr noise would corrupt the JSON being parsed.
+   * Absent (undefined) on PTY handles — a PTY merges the streams inherently.
+   */
+  onStdout?(cb: (data: string) => void): void;
+  /** Optional stderr-only subscription. See onStdout. */
+  onStderr?(cb: (data: string) => void): void;
   onExit(cb: (exitCode: number) => void): void;
   write(data: string): void;
   kill(): void;
@@ -51,6 +60,16 @@ export class SpawnHandle implements ProcessHandle {
       logger.debug('SpawnHandle stderr: %d bytes', chunk.length);
       cb(chunk.toString());
     });
+  }
+
+  /** stdout only — never receives stderr. Independent of onData(). */
+  onStdout(cb: (data: string) => void): void {
+    this.child.stdout?.on('data', (chunk: Buffer) => cb(chunk.toString()));
+  }
+
+  /** stderr only — never receives stdout. Independent of onData(). */
+  onStderr(cb: (data: string) => void): void {
+    this.child.stderr?.on('data', (chunk: Buffer) => cb(chunk.toString()));
   }
 
   onExit(cb: (exitCode: number) => void): void {
