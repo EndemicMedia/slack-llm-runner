@@ -82,3 +82,17 @@ The EnvelopeParser has a configurable activation delay (default 1500ms for inter
 - Platform: Windows. Bash available at `/usr/bin/bash` (Git Bash).
 - Socket Mode: only ONE active connection per app token. Kill all node processes before restarting (`taskkill /IM node.exe /F`).
 - The envelope prompt template is at `prompts/envelope-instructions.txt` — editable without code changes.
+
+## Mail Triage Agent
+
+An email-triage capability built on top of the runner: a cron job (`config/jobs.yaml`, `kind: "command"`, `commandPrefix: "mail-triage"`) runs Claude Code restricted to a read-only `mailctl` CLI (`src/mail/mailctl.ts`, shimmed at `bin/mailctl`), which proposes actions into a SQLite queue (`src/mail/threadStore.ts`, default `data/mail.db`). A human approves or rejects via Slack buttons (`src/slack/listener.ts`'s `mail_approve`/`mail_reject` handlers); only an approval invokes `src/mail/executor.ts`, the sole file that performs a real write to the mail server via [Himalaya](https://github.com/pimalaya/himalaya).
+
+**The enforcement principle**: Claude's mail permissions are restricted by `--allowedTools`/`--disallowedTools`/`--permission-mode` CLI flags (`CommandConfig` fields wired into `spawnArgs` in `src/cli/runner.ts`) and by what `mailctl` does not expose as a subcommand (no himalaya write verb, no recipient-supplying flag anywhere in its argument parser) — never by CLAUDE.md prose or prompt text alone, since permission rules are enforced by the Claude Code CLI itself, not by the model choosing to comply.
+
+**Himalaya setup** (not yet wired into `loadConfig()` — `config/mail.yaml` is a placeholder):
+- Version pinned to **v2.1.0**. Install via the official script: `curl -sSL https://raw.githubusercontent.com/pimalaya/himalaya/v2.1.0/install.sh | sh` (see `Dockerfile` for the containerized install). It is a Rust binary, **not** an npm package.
+- Config file: `~/.config/himalaya/config.toml` on Linux/macOS (or `$XDG_CONFIG_HOME/himalaya`), `%APPDATA%\himalaya` on Windows — mirror `process.platform === 'win32'` branching wherever a mail module needs this path (see `src/mail/himalayaClient.ts`'s `resolveConfigDir()`).
+- **v1 uses Gmail app-password IMAP/SMTP, not native Gmail OAuth.** Himalaya v2 ships no OAuth flow of its own — its native `gmail.auth.token.*` backend expects an already-valid bearer token from an external broker (e.g. [ortie](https://github.com/pimalaya/ortie)), which is out of scope for v1. Use an [app password](https://myaccount.google.com/apppasswords) with the generic IMAP/SMTP backend instead; see the plan's "Config additions" section for a worked `config.toml` example.
+- Secrets go through `password.cmd` (a shell command printing the secret to stdout — e.g. `pass show gmail/app-password` on Linux, or an equivalent Windows credential-store command), never `password.raw`.
+
+**Deferred to v2+** (see the plan at the time of writing for the full list): the `send` action kind (arbitrary-recipient outbound mail — the one action that would reintroduce a Claude-chosen recipient), native Gmail OAuth, multi-account support, a local pre-filter classifier, commitment/follow-up tracking.
