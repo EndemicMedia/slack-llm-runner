@@ -140,6 +140,88 @@ npm run build      # Build for production
 npm start          # Run production build
 ```
 
+## 🐳 Docker
+
+Running in Docker is recommended for production deployments (e.g., on Hetzner or other Linux servers).
+
+### Quick Start with Docker
+
+```bash
+# 1. Copy the environment template
+cp .env.example .env
+
+# 2. Edit .env with your Slack and API tokens
+# Required variables:
+#   - SLACK_APP_TOKEN
+#   - SLACK_BOT_TOKEN
+#   - SLACK_LISTEN_CHANNELS
+#   - ALLOWED_USER_IDS
+#   - CLAUDE_CODE_OAUTH_TOKEN (for Claude commands)
+#   - ANTHROPIC_API_KEY (for Claude API access)
+nano .env
+
+# 3. Build and run
+docker compose up -d --build
+
+# 4. View logs
+docker compose logs -f slack-llm-runner
+```
+
+### Docker Image Structure
+
+The Docker image uses a multi-stage build:
+- **Builder stage** (`node:22-bookworm`): Compiles native modules (`node-pty`, `better-sqlite3`) and TypeScript
+- **Runtime stage** (`node:22-bookworm-slim`): Lean production image with compiled binaries only
+
+### Volumes
+
+The Docker setup uses three bind-mounted volumes for persistent data:
+
+| Volume | Purpose |
+|--------|---------|
+| `./config` | Configuration files (YAML, prompts) — edits sync without rebuild |
+| `./data` | Application data and databases |
+| `./logs` | Session logs and audit trails |
+
+### Environment Variables in Docker
+
+See `.env.example` for all available options. Key variables for Docker:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `SLACK_APP_TOKEN` | Yes | Socket Mode token (`xapp-...`) |
+| `SLACK_BOT_TOKEN` | Yes | Web API token (`xoxb-...`) |
+| `SLACK_LISTEN_CHANNELS` | Yes | Channel IDs to monitor |
+| `ALLOWED_USER_IDS` | Yes | Slack user IDs allowed to run commands |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Optional | For Claude Code CLI integration |
+| `ANTHROPIC_API_KEY` | Optional | For direct Anthropic API calls |
+
+### Useful Docker Commands
+
+```bash
+# Rebuild image after code changes
+docker compose build
+
+# View real-time logs
+docker compose logs -f
+
+# Stop containers
+docker compose down
+
+# Restart service
+docker compose restart slack-llm-runner
+
+# Shell into running container (debugging)
+docker compose exec slack-llm-runner bash
+
+# Remove volumes (careful: deletes data/logs/config!)
+docker compose down -v
+```
+
+### Note: Windows Development
+
+Windows developers should continue running natively with `npm run dev` (not Docker). The Docker setup targets Linux production environments only.
+
 ## 💬 Usage
 
 ### Shell Commands (Full Output)

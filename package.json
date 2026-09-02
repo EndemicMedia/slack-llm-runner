@@ -9,7 +9,7 @@
     "dev": "tsx src/index.ts",
     "test": "node --import tsx --test test/unit/processHandle.test.ts test/integration/integration.test.ts test/e2e/e2e-exact-user-command.test.ts",
     "test:unit": "node --import tsx --test test/unit/processHandle.test.ts",
-    "test:integration": "node --import tsx --test test/integration/integration.test.ts test/integration/slack-integration.test.ts",
+    "test:integration": "node --import tsx --test test/integration/integration.test.ts test/integration/slack-integration.test.ts test/integration/schedulerCommandJob.test.ts",
     "test:e2e": "node --import tsx --test test/e2e/e2e-exact-user-command.test.ts test/e2e/e2e-session-lifecycle.test.ts",
     "kill": "node scripts/kill-project-processes.js",
     "predev": "npm run kill",

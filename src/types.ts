@@ -28,6 +28,14 @@ export interface CommandConfig {
   sessionFlag?: string;   // e.g. "-S" — flag for passing session ID (any string)
   sessionIdFlag?: string; // e.g. "--session-id" — flag for passing session ID as UUID
   resumeFlag?: string;    // e.g. "--resume" — flag for resuming a session
+  // ── Optional CLI restriction / output plumbing (not yet wired into runner.ts) ──
+  allowedTools?: string;      // e.g. "Bash(mailctl:*)"
+  disallowedTools?: string[]; // e.g. ["Read","Write","Edit"]
+  permissionMode?: string;    // e.g. "dontAsk"
+  outputFormat?: string;      // e.g. "json"
+  jsonSchemaPath?: string;    // path to a JSON Schema file for structured output
+  maxTurns?: number;
+  maxBudgetUsd?: number;
 }
 
 /** Single authorization rule from authorization.yaml */
@@ -45,6 +53,12 @@ export interface JobDefinition {
   channel: string;
   cwd?: string;
   label?: string;
+  /** 'shell' (default when absent) runs `command` through the platform shell;
+   *  'command' resolves `commandPrefix` against config.commands and applies
+   *  the same authorization/blocklist checks as the interactive router. */
+  kind?: 'shell' | 'command';
+  commandPrefix?: string;
+  commandArgs?: string;
 }
 
 /** Result of parsing a Slack message into a command */

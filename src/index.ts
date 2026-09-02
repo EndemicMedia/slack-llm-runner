@@ -57,7 +57,7 @@ async function main(): Promise<void> {
   const runner    = new SessionManager(config, reporter);
   const authorizer = new Authorizer(config);
   const router    = new CommandRouter(config, reporter, runner, authorizer);
-  const scheduler = new Scheduler(config, reporter, runner);
+  const scheduler = new Scheduler(config, reporter, runner, authorizer);
 
   registerListeners(app, router, config.slack.listenChannels);
   scheduler.start();
