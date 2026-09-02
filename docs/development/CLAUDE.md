@@ -75,6 +75,7 @@ The EnvelopeParser has a configurable activation delay (default 1500ms for inter
 - `node-cron`: v4.2.1 (ESM-native). Use named imports: `import { schedule, validate } from 'node-cron'`.
 - `js-yaml`: v4. Use `import { load } from 'js-yaml'` (not `parse`).
 - `@types/js-yaml`: max 4.0.9 — do not use `^4.1.x`.
+- `better-sqlite3`: v13.0.3. Native module — ships prebuilt binaries (via `prebuild-install`/node-gyp-build) for Node 20.x/22.x on linux-x64, win32-x64, and darwin-x64/arm64, covering the ubuntu/windows/macos CI matrix without a compiler toolchain. `@types/better-sqlite3` pinned to a matching major (`^7.6.13`).
 
 ## Environment
 
