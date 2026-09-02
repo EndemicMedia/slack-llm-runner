@@ -123,6 +123,7 @@ export class MailStore {
   private getProposedActionStmt: Statement;
   private markDecidedStmt: Statement;
   private markExecutedStmt: Statement;
+  private claimForExecutionStmt: Statement;
 
   constructor(dbPath: string) {
     this.db = new Database(dbPath);
@@ -175,6 +176,13 @@ export class MailStore {
       UPDATE proposed_actions
       SET status = @status, executed_at = datetime('now'), error = @error
       WHERE action_id = @action_id
+    `);
+
+    // Atomic execution claim. See `claimForExecution` below.
+    this.claimForExecutionStmt = this.db.prepare(`
+      UPDATE proposed_actions
+      SET executed_at = datetime('now')
+      WHERE action_id = ? AND status = 'approved' AND executed_at IS NULL
     `);
   }
 
@@ -247,6 +255,29 @@ export class MailStore {
 
   markDecided(actionId: string, status: 'approved' | 'rejected', userId: string): void {
     this.markDecidedStmt.run({ action_id: actionId, status, decided_by: userId });
+  }
+
+  /**
+   * Atomically claims an approved action for execution, returning `true` only
+   * for the caller that won the claim.
+   *
+   * This is the cross-process idempotency guard for `executor.ts`. The executor
+   * runs as a separate short-lived process per invocation (spawned by the Slack
+   * approve handler), so two rapid button clicks are two *processes*, not two
+   * calls in one event loop — an in-memory guard cannot help. This single
+   * `UPDATE ... WHERE status='approved' AND executed_at IS NULL` runs inside
+   * SQLite's own write transaction with an exclusive write lock on the database
+   * file, so exactly one concurrent claimant can observe `changes === 1`; every
+   * other one sees `0` and must refuse to touch the mail server.
+   *
+   * `executed_at` is used as the claim marker rather than a new `'executing'`
+   * status because `status` carries a `CHECK` constraint that does not include
+   * such a value, and `CREATE TABLE IF NOT EXISTS` would leave already-deployed
+   * databases on the old constraint. `executed_at` is unconstrained and is
+   * overwritten moments later by `markExecuted`.
+   */
+  claimForExecution(actionId: string): boolean {
+    return this.claimForExecutionStmt.run(actionId).changes === 1;
   }
 
   markExecuted(actionId: string, status: 'executed' | 'failed', error?: string): void {
