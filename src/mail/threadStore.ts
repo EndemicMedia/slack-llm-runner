@@ -117,7 +117,9 @@ export class MailStore {
   private upsertEnvelopeStmt: Statement;
   private getEnvelopeStmt: Statement;
   private getEnvelopeByMessageIdStmt: Statement;
+  private listEnvelopesByFromStmt: Statement;
   private createProposedActionStmt: Statement;
+  private getProposedActionByIdempotencyKeyStmt: Statement;
   private getProposedActionStmt: Statement;
   private markDecidedStmt: Statement;
   private markExecutedStmt: Statement;
@@ -144,6 +146,9 @@ export class MailStore {
 
     this.getEnvelopeStmt = this.db.prepare(`SELECT * FROM mail_envelopes WHERE id = ?`);
     this.getEnvelopeByMessageIdStmt = this.db.prepare(`SELECT * FROM mail_envelopes WHERE message_id = ?`);
+    this.listEnvelopesByFromStmt = this.db.prepare(
+      `SELECT * FROM mail_envelopes WHERE from_addr = ? ORDER BY date DESC LIMIT ?`,
+    );
 
     this.createProposedActionStmt = this.db.prepare(`
       INSERT INTO proposed_actions (
@@ -156,6 +161,9 @@ export class MailStore {
     `);
 
     this.getProposedActionStmt = this.db.prepare(`SELECT * FROM proposed_actions WHERE action_id = ?`);
+    this.getProposedActionByIdempotencyKeyStmt = this.db.prepare(
+      `SELECT * FROM proposed_actions WHERE idempotency_key = ?`,
+    );
 
     this.markDecidedStmt = this.db.prepare(`
       UPDATE proposed_actions
@@ -199,6 +207,12 @@ export class MailStore {
     return row ? rowToEnvelope(row) : undefined;
   }
 
+  /** Most recent envelopes from a given sender address (local cache only). */
+  listEnvelopesByFrom(fromAddr: string, limit = 20): MailEnvelope[] {
+    const rows = this.listEnvelopesByFromStmt.all(fromAddr, limit) as EnvelopeRow[];
+    return rows.map(rowToEnvelope);
+  }
+
   createProposedAction(a: NewProposedAction): string {
     try {
       this.createProposedActionStmt.run({
@@ -222,6 +236,12 @@ export class MailStore {
 
   getProposedAction(actionId: string): ProposedAction | undefined {
     const row = this.getProposedActionStmt.get(actionId) as ProposedActionRow | undefined;
+    return row ? rowToProposedAction(row) : undefined;
+  }
+
+  /** Looks up an action by its idempotency key — used for idempotent re-proposal. */
+  getProposedActionByIdempotencyKey(key: string): ProposedAction | undefined {
+    const row = this.getProposedActionByIdempotencyKeyStmt.get(key) as ProposedActionRow | undefined;
     return row ? rowToProposedAction(row) : undefined;
   }
 
