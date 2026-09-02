@@ -1,0 +1,10 @@
+# Mail triage configuration.
+#
+# NOTE: this file is NOT yet wired into AppConfig/loadConfig() (src/utils/config.ts).
+# It is a placeholder for the executor/scheduler-integration stage, which will
+# read it to know which himalaya account, digest channel, and SQLite db to use.
+
+mail:
+  imapAccount: "personal"
+  digestChannel: "CHANGE_ME"
+  dbPath: "data/mail.db"
