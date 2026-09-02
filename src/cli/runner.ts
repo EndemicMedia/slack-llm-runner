@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, existsSync } from 'fs';
+import { appendFileSync, mkdirSync, existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 import { type AppConfig, type SessionSpawnOptions } from '../types.js';
 import { type SlackReporter } from '../slack/reporter.js';
@@ -30,6 +30,15 @@ export class SessionManager {
   constructor(
     private readonly config:   AppConfig,
     private readonly reporter: SlackReporter,
+    /**
+     * Optional capture-mode sink. Invoked instead of the normal completion
+     * banner when a command declares `outputFormat: 'json'`. Deliberately
+     * generic (not mail-specific): any future JSON-output job type reuses it.
+     * When undefined, capture-mode sessions fall back to the normal banner.
+     */
+    private readonly onJsonResult?: (
+      channelId: string, threadTs: string, rawStdout: string, exitCode: number,
+    ) => Promise<void>,
   ) {}
 
   /** True if an active session exists for the given thread timestamp */
@@ -69,6 +78,7 @@ export class SessionManager {
       channelId,
       threadTs,
       envelope:       cmdConfig.envelope,
+      outputFormat:   cmdConfig.outputFormat,
       reporter:       this.reporter,
       envelopeConfig: {
         // One-shot mode: no PTY echo to skip, so activation delay must be 0
@@ -133,6 +143,24 @@ export class SessionManager {
         logger.info('✅ Injected session-id flag: %s %s', cmdConfig.sessionIdFlag, uuidSessionId);
       }
     }
+    // ── Optional CLI restriction / output flags (additive; absent → unchanged) ──
+    // `allowedTools` is a free-form string passed straight through (the CLI
+    // accepts one comma/space-separated value, e.g. "Bash(mailctl:*)").
+    // `disallowedTools` is an array, so the flag is repeated once per entry —
+    // the conventional, least-ambiguous CLI form (no comma-parsing assumptions).
+    if (cmdConfig.allowedTools) spawnArgs.push('--allowedTools', cmdConfig.allowedTools);
+    for (const tool of cmdConfig.disallowedTools ?? []) {
+      spawnArgs.push('--disallowedTools', tool);
+    }
+    if (cmdConfig.permissionMode) spawnArgs.push('--permission-mode', cmdConfig.permissionMode);
+    if (cmdConfig.outputFormat)   spawnArgs.push('--output-format', cmdConfig.outputFormat);
+    if (cmdConfig.jsonSchemaPath) {
+      spawnArgs.push('--json-schema',
+        readFileSync(resolve(process.cwd(), cmdConfig.jsonSchemaPath), 'utf-8'));
+    }
+    if (cmdConfig.maxTurns)     spawnArgs.push('--max-turns',      String(cmdConfig.maxTurns));
+    if (cmdConfig.maxBudgetUsd) spawnArgs.push('--max-budget-usd', String(cmdConfig.maxBudgetUsd));
+
     logger.debug('spawnArgs: %j', spawnArgs);
     logger.info('📝 Full spawn command: %s %s', cmdConfig.binary, spawnArgs.join(' '));
 
@@ -153,10 +181,31 @@ export class SessionManager {
     // CRITICAL: Attach event listeners IMMEDIATELY after spawn to avoid race condition
     // For fast commands, output can be emitted before async operations complete
     logger.debug('Attaching onData listener for %s', sessionId);
-    handle.onData((data: string) => {
-      logger.debug('onData callback fired: %d bytes', data.length);
-      router.push(data);
-    });
+    if (router.capture) {
+      // Capture mode: Track 1 (log) still receives every raw byte from both
+      // streams, but only stdout feeds the JSON buffer — stderr noise would
+      // corrupt the JSON. Requires a handle with separated streams.
+      if (!handle.onStdout || !handle.onStderr) {
+        handle.kill();
+        const msg = `capture mode (outputFormat: json) requires one-shot mode — `
+          + `'${cmdConfig.prefix}' runs in ${cmdConfig.mode} mode, whose PTY merges stdout and stderr`;
+        logger.error(msg);
+        await this.reporter.postMessage(channelId, `❌ ${msg}`, threadTs);
+        return;
+      }
+      handle.onStdout((data: string) => {
+        router.push(data);          // Track 1 – log
+        router.captureStdout(data); // JSON buffer – stdout only
+      });
+      handle.onStderr((data: string) => {
+        router.push(data);          // Track 1 – log only
+      });
+    } else {
+      handle.onData((data: string) => {
+        logger.debug('onData callback fired: %d bytes', data.length);
+        router.push(data);
+      });
+    }
 
     // Wire process exit → cleanup (guard against double-fire)
     let exited = false;
@@ -326,6 +375,22 @@ export class SessionManager {
     logger.debug('finalise() calling router.finish() for session %s', session.id);
     await session.router.finish(exitCode);
     logger.debug('finalise() router.finish() completed');
+
+    // Capture mode: hand the raw stdout to the injected consumer instead of
+    // posting the completion banner. Falls back to the banner when no consumer
+    // is wired, so output is never silently dropped.
+    if (session.router.capture && this.onJsonResult) {
+      try {
+        await this.onJsonResult(
+          session.channelId, threadTs, session.router.getCapturedStdout(), exitCode,
+        );
+      } catch (err) {
+        logger.error('onJsonResult handler failed for session %s: %s', session.id, err);
+      }
+      logger.info('Session %s finished (capture mode) | exit=%d', session.id, exitCode);
+      this.sessions.delete(threadTs);
+      return;
+    }
 
     const label =
       exitCode === -1  ? '⏱️ Session timed out'
