@@ -99,8 +99,16 @@ describe('SpawnHandle – kill', () => {
 
   it('kill() terminates a long-running process promptly', async () => {
     const start = Date.now();
-    // "sleep 30" waits 30 s; we kill after 200 ms
-    const child  = spawn(bashBinary, ['-c', 'sleep 30'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    // A shell running `sleep`/`timeout` as a subcommand forks a child of its
+    // own; on Windows, killing the wrapping bash.exe doesn't reliably reach
+    // that grandchild, so the process lingers for the full duration. Use
+    // Windows' native single-process `timeout` (no subshell fork) there, and
+    // bash's `sleep` (which behaves correctly under a real POSIX shell) on
+    // Linux/macOS — this test is about kill() promptness, not about bash.
+    const [killBinary, killArgs] = process.platform === 'win32'
+      ? ['cmd', ['/c', 'timeout /t 30 /nobreak >nul']]
+      : [bashBinary, ['-c', 'sleep 30']];
+    const child  = spawn(killBinary, killArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
     const handle = new SpawnHandle(child);
 
     setTimeout(() => handle.kill(), 200);
