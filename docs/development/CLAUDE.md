@@ -96,3 +96,14 @@ An email-triage capability built on top of the runner: a cron job (`config/jobs.
 - Secrets go through `password.cmd` (a shell command printing the secret to stdout — e.g. `pass show gmail/app-password` on Linux, or an equivalent Windows credential-store command), never `password.raw`.
 
 **Deferred to v2+** (see the plan at the time of writing for the full list): the `send` action kind (arbitrary-recipient outbound mail — the one action that would reintroduce a Claude-chosen recipient), native Gmail OAuth, multi-account support, a local pre-filter classifier, commitment/follow-up tracking.
+
+### Go-Live Checklist
+
+All of the mail-triage code is written and unit/integration-tested, but nothing wires it into a running instance yet — the pieces above exist without anything connecting them at startup. To actually turn it on:
+
+1. **Install Himalaya and create a real account config.** `~/.config/himalaya/config.toml` (or the Windows/`XDG_CONFIG_HOME` equivalent above) needs a real `[accounts.<name>]` block — an app-password Gmail IMAP/SMTP entry for v1, with `mailbox.alias.archive`/`trash`/etc. set to Gmail's special folder names. Nothing in this repo creates this file for you.
+2. **Fill in and load `config/mail.yaml`.** It exists today only as a placeholder (`imapAccount`, `digestChannel`, `dbPath`) and is not read by `src/utils/config.ts`'s `loadConfig()` — extend `AppConfig`/`loadConfig()` to actually parse it, matching the existing YAML-loading pattern for `commands.yaml`/`jobs.yaml`/`authorization.yaml`.
+3. **Wire `MailStore` into `src/index.ts`.** Construct a `MailStore` (from `src/mail/threadStore.ts`, using the `dbPath` from `mail.yaml`) at startup and pass it plus the resolved db path into `registerListeners(app, router, listenChannels, mailStore, mailDbPath)` (`src/slack/listener.ts`) — without this, the `mail_approve`/`mail_reject` buttons never get registered with Bolt, and clicking them does nothing (no error, just silence).
+4. **Wire an `onJsonResult` callback into `SessionManager`.** `src/cli/runner.ts`'s `SessionManager` constructor takes an optional 3rd param for this. The callback needs to: parse the mail-triage job's captured JSON as a `MailDigest`, call `renderDigestBlocks()` (`src/mail/digestRenderer.ts`) against the same `MailStore` instance, and post the result via `SlackReporter.postBlocks()`. Without this, the cron job runs Claude and populates `proposed_actions`, but nothing ever reaches Slack — the digest is silently dropped.
+5. **Uncomment the job.** `config/jobs.yaml`'s `morning-mail-triage` entry is commented out; uncomment it and set a real Slack `channel` ID (matching `mail.yaml`'s `digestChannel`).
+6. **Test end-to-end against a real mailbox** (ideally a disposable/test account first) — everything built so far is unit/integration-tested with Himalaya calls mocked or stubbed; no session has run the actual loop against a live inbox.
