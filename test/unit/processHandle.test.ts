@@ -10,6 +10,12 @@ import assert               from 'node:assert';
 import { spawn }            from 'node:child_process';
 import { SpawnHandle, spawnProcess } from '../../src/cli/processHandle.js';
 
+// `bash.exe` is Git for Windows' name on PATH (matching commands.yaml's
+// win32 shell config); on Linux/macOS the same shell is just `bash`. These
+// tests exercise the spawn mechanism, not a specific shell, so they use
+// whichever name resolves on the current platform.
+const bashBinary = process.platform === 'win32' ? 'bash.exe' : 'bash';
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 /** Collect all output + exit code from a SpawnHandle, returns a promise */
@@ -26,7 +32,7 @@ function collect(handle: SpawnHandle): Promise<{ output: string; code: number }>
 describe('SpawnHandle – basic output capture', () => {
 
   it('captures stdout from a simple echo', async () => {
-    const child  = spawn('cmd', ['/c', 'echo hello world'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const child  = spawn(bashBinary, ['-c', 'echo hello world'], { stdio: ['pipe', 'pipe', 'pipe'] });
     const handle = new SpawnHandle(child);
     const { output, code } = await collect(handle);
 
@@ -35,7 +41,7 @@ describe('SpawnHandle – basic output capture', () => {
   });
 
   it('captures multi-line stdout', async () => {
-    const child  = spawn('cmd', ['/c', 'echo line1 & echo line2 & echo line3'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const child  = spawn(bashBinary, ['-c', 'echo line1; echo line2; echo line3'], { stdio: ['pipe', 'pipe', 'pipe'] });
     const handle = new SpawnHandle(child);
     const { output, code } = await collect(handle);
 
@@ -46,7 +52,7 @@ describe('SpawnHandle – basic output capture', () => {
   });
 
   it('captures stderr', async () => {
-    const child  = spawn('cmd', ['/c', 'echo err-msg 1>&2'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const child  = spawn(bashBinary, ['-c', 'echo err-msg 1>&2'], { stdio: ['pipe', 'pipe', 'pipe'] });
     const handle = new SpawnHandle(child);
     const { output } = await collect(handle);
 
@@ -55,7 +61,7 @@ describe('SpawnHandle – basic output capture', () => {
 
   it('captures mixed stdout + stderr', async () => {
     // out1 → stdout, out2 → stderr, out3 → stdout
-    const child  = spawn('cmd', ['/c', 'echo out1 & echo out2 1>&2 & echo out3'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const child  = spawn(bashBinary, ['-c', 'echo out1; echo out2 1>&2; echo out3'], { stdio: ['pipe', 'pipe', 'pipe'] });
     const handle = new SpawnHandle(child);
     const { output } = await collect(handle);
 
@@ -68,21 +74,21 @@ describe('SpawnHandle – basic output capture', () => {
 describe('SpawnHandle – exit codes', () => {
 
   it('reports exit code 0 on success', async () => {
-    const child  = spawn('cmd', ['/c', 'exit 0'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const child  = spawn(bashBinary, ['-c', 'exit 0'], { stdio: ['pipe', 'pipe', 'pipe'] });
     const handle = new SpawnHandle(child);
     const { code } = await collect(handle);
     assert.strictEqual(code, 0);
   });
 
   it('reports non-zero exit code', async () => {
-    const child  = spawn('cmd', ['/c', 'exit 42'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const child  = spawn(bashBinary, ['-c', 'exit 42'], { stdio: ['pipe', 'pipe', 'pipe'] });
     const handle = new SpawnHandle(child);
     const { code } = await collect(handle);
     assert.strictEqual(code, 42);
   });
 
   it('reports exit code 1 from a failing command', async () => {
-    const child  = spawn('cmd', ['/c', 'nonexistent_cmd_xyz123'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const child  = spawn(bashBinary, ['-c', 'nonexistent_cmd_xyz123'], { stdio: ['pipe', 'pipe', 'pipe'] });
     const handle = new SpawnHandle(child);
     const { code } = await collect(handle);
     assert.notStrictEqual(code, 0);
@@ -93,8 +99,8 @@ describe('SpawnHandle – kill', () => {
 
   it('kill() terminates a long-running process promptly', async () => {
     const start = Date.now();
-    // "timeout /t 30" waits 30 s; we kill after 200 ms
-    const child  = spawn('cmd', ['/c', 'timeout /t 30 /nobreak >nul'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    // "sleep 30" waits 30 s; we kill after 200 ms
+    const child  = spawn(bashBinary, ['-c', 'sleep 30'], { stdio: ['pipe', 'pipe', 'pipe'] });
     const handle = new SpawnHandle(child);
 
     setTimeout(() => handle.kill(), 200);
@@ -112,7 +118,7 @@ describe('SpawnHandle – kill', () => {
 describe('spawnProcess – one-shot factory', () => {
 
   it('spawns and captures output via the factory', async () => {
-    const handle = await spawnProcess('cmd', ['/c', 'echo factory-ok'], {
+    const handle = await spawnProcess(bashBinary, ['-c', 'echo factory-ok'], {
       mode: 'one-shot',
       cwd:  process.cwd(),
     });
@@ -132,10 +138,10 @@ describe('spawnProcess – one-shot factory', () => {
 
 // ── bash.exe – the shell configured in commands.yaml ────────────────────────
 
-describe('spawnProcess – bash.exe (commands.yaml shell)', () => {
+describe(`spawnProcess – ${bashBinary} (commands.yaml shell)`, () => {
 
-  it('runs echo via bash.exe -c', async () => {
-    const handle = await spawnProcess('bash.exe', ['-c', 'echo bash-works'], {
+  it(`runs echo via ${bashBinary} -c`, async () => {
+    const handle = await spawnProcess(bashBinary, ['-c', 'echo bash-works'], {
       mode: 'one-shot',
       cwd:  process.cwd(),
     });
@@ -146,7 +152,7 @@ describe('spawnProcess – bash.exe (commands.yaml shell)', () => {
   });
 
   it('captures exit code from bash -c "exit N"', async () => {
-    const handle = await spawnProcess('bash.exe', ['-c', 'exit 7'], {
+    const handle = await spawnProcess(bashBinary, ['-c', 'exit 7'], {
       mode: 'one-shot',
       cwd:  process.cwd(),
     });
@@ -155,7 +161,7 @@ describe('spawnProcess – bash.exe (commands.yaml shell)', () => {
   });
 
   it('captures stderr from bash', async () => {
-    const handle = await spawnProcess('bash.exe', ['-c', 'echo bash-err >&2'], {
+    const handle = await spawnProcess(bashBinary, ['-c', 'echo bash-err >&2'], {
       mode: 'one-shot',
       cwd:  process.cwd(),
     });
@@ -164,7 +170,7 @@ describe('spawnProcess – bash.exe (commands.yaml shell)', () => {
   });
 
   it('runs a realistic multi-step command', async () => {
-    const handle = await spawnProcess('bash.exe', ['-c', 'echo step1 && echo step2 && echo step3'], {
+    const handle = await spawnProcess(bashBinary, ['-c', 'echo step1 && echo step2 && echo step3'], {
       mode: 'one-shot',
       cwd:  process.cwd(),
     });

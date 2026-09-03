@@ -127,7 +127,7 @@ export class OutputRouter {
     }
     try {
       logger.debug('OutputRouter.finish() calling logWriter.close()');
-      this.logWriter.close(exitCode);
+      await this.logWriter.close(exitCode);
       logger.debug('OutputRouter.finish() logWriter closed');
     } catch (err) {
       logger.error('OutputRouter.finish() logWriter.close() failed: %s', err);

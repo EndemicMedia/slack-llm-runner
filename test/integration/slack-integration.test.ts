@@ -14,7 +14,12 @@ import { CommandRouter } from '../../src/commands/router.js';
 
 describe('Slack Integration Test - Full message flow', () => {
 
-  it('Slack message → command execution → output captured in log', async () => {
+  // This exercises the real, checked-in `run` prefix from config/commands.yaml,
+  // which hardcodes `binary: "bash.exe"` — the project's documented Windows-first
+  // shell config (see docs/development/CLAUDE.md's Environment section), not a
+  // test-only detail. It genuinely can't run on non-Windows CI runners; skip
+  // rather than papering over it by editing production config for CI's sake.
+  it('Slack message → command execution → output captured in log', { skip: process.platform !== 'win32' }, async () => {
     // Load real config
     const config = loadConfig();
 

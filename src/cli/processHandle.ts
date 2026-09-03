@@ -113,7 +113,11 @@ export async function spawnProcess(
       child.on('error', reject);
       child.on('spawn', () => {
         // Pipe dummy input for tools like Claude that require stdin
-        // Must close stdin so Claude knows input is complete
+        // Must close stdin so Claude knows input is complete.
+        // A very fast-exiting command (e.g. `echo`) can close its stdin
+        // before this write lands, which would otherwise surface as an
+        // uncaught EPIPE — this write is best-effort, so swallow it.
+        child.stdin?.on('error', () => {});
         child.stdin?.write('\n');
         child.stdin?.end();
         resolve(new SpawnHandle(child));

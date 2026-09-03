@@ -33,13 +33,20 @@ export class LogWriter {
 
   /**
    * Writes a footer with exit metadata and closes the stream.
+   * Resolves only once the data is actually flushed to disk — callers that
+   * read the file back immediately after (tests, /logs) would otherwise
+   * race a write stream that has been told to end but hasn't finished yet.
    * @param exitCode Process exit code; -1 indicates timeout
    */
-  close(exitCode: number): void {
-    if (!this.stream) return;
-    this.stream.write(`\n=== Session ended: ${new Date().toISOString()} | exit code: ${exitCode} ===\n`);
-    this.stream.end();
+  close(exitCode: number): Promise<void> {
+    const stream = this.stream;
+    if (!stream) return Promise.resolve();
     this.stream = null;
-    logger.debug('Log closed: %s', this.logPath);
+    return new Promise((resolve) => {
+      stream.end(`\n=== Session ended: ${new Date().toISOString()} | exit code: ${exitCode} ===\n`, () => {
+        logger.debug('Log closed: %s', this.logPath);
+        resolve();
+      });
+    });
   }
 }
