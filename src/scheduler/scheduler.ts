@@ -2,6 +2,8 @@ import { schedule, validate, type ScheduledTask } from 'node-cron';
 import { type AppConfig, type JobDefinition } from '../types.js';
 import { type SlackReporter } from '../slack/reporter.js';
 import { type SessionManager } from '../cli/runner.js';
+import { type Authorizer } from '../security/authorizer.js';
+import { checkCommand } from '../security/commandFilter.js';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('Scheduler');
@@ -18,6 +20,7 @@ export class Scheduler {
     private readonly config:   AppConfig,
     private readonly reporter: SlackReporter,
     private readonly runner:   SessionManager,
+    private readonly authorizer: Authorizer,
   ) {}
 
   /**
@@ -54,6 +57,53 @@ export class Scheduler {
       job.channel,
       `🕐 Scheduled job: *${label}* starting…`,
     );
+
+    // ── kind: 'command' — resolve a real CommandConfig and apply the same
+    //    authorization + blocklist checks the interactive router applies ──
+    if (job.kind === 'command') {
+      const cmdConfig = this.config.commands.find((c) => c.prefix === job.commandPrefix);
+      if (!cmdConfig) {
+        logger.warn('Job "%s": unknown command prefix "%s"', job.name, job.commandPrefix);
+        await this.reporter.postMessage(
+          job.channel,
+          `⚠️ Scheduled job *${label}*: unknown command prefix \`${job.commandPrefix}\` — not run.`,
+          threadTs,
+        );
+        return;
+      }
+
+      if (!this.authorizer.isPrefixAllowed(cmdConfig.prefix, job.channel)) {
+        logger.warn('Job "%s": prefix "%s" not authorized in channel %s',
+          job.name, cmdConfig.prefix, job.channel);
+        await this.reporter.postMessage(
+          job.channel,
+          `🚫 Scheduled job *${label}* is not authorized to run \`${cmdConfig.prefix}\` in this channel — not run.`,
+          threadTs,
+        );
+        return;
+      }
+
+      const commandArgs = job.commandArgs ?? '';
+      const blocked = checkCommand(commandArgs);
+      if (blocked) {
+        logger.warn('Job "%s": command blocked — %s', job.name, blocked);
+        await this.reporter.postMessage(
+          job.channel,
+          `🚫 Scheduled job *${label}* blocked: ${blocked}`,
+          threadTs,
+        );
+        return;
+      }
+
+      await this.runner.spawn({
+        channelId: job.channel,
+        threadTs,
+        command:   commandArgs,
+        config:    cmdConfig,
+        cwd:       job.cwd,
+      });
+      return;
+    }
 
     // Determine the platform shell
     const shell = process.platform === 'win32'

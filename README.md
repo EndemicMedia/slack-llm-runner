@@ -140,6 +140,88 @@ npm run build      # Build for production
 npm start          # Run production build
 ```
 
+## 🐳 Docker
+
+Running in Docker is recommended for production deployments (e.g., on Hetzner or other Linux servers).
+
+### Quick Start with Docker
+
+```bash
+# 1. Copy the environment template
+cp .env.example .env
+
+# 2. Edit .env with your Slack and API tokens
+# Required variables:
+#   - SLACK_APP_TOKEN
+#   - SLACK_BOT_TOKEN
+#   - SLACK_LISTEN_CHANNELS
+#   - ALLOWED_USER_IDS
+#   - CLAUDE_CODE_OAUTH_TOKEN (for Claude commands)
+#   - ANTHROPIC_API_KEY (for Claude API access)
+nano .env
+
+# 3. Build and run
+docker compose up -d --build
+
+# 4. View logs
+docker compose logs -f slack-llm-runner
+```
+
+### Docker Image Structure
+
+The Docker image uses a multi-stage build:
+- **Builder stage** (`node:22-bookworm`): Compiles native modules (`node-pty`, `better-sqlite3`) and TypeScript
+- **Runtime stage** (`node:22-bookworm-slim`): Lean production image with compiled binaries only
+
+### Volumes
+
+The Docker setup uses three bind-mounted volumes for persistent data:
+
+| Volume | Purpose |
+|--------|---------|
+| `./config` | Configuration files (YAML, prompts) — edits sync without rebuild |
+| `./data` | Application data and databases |
+| `./logs` | Session logs and audit trails |
+
+### Environment Variables in Docker
+
+See `.env.example` for all available options. Key variables for Docker:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `SLACK_APP_TOKEN` | Yes | Socket Mode token (`xapp-...`) |
+| `SLACK_BOT_TOKEN` | Yes | Web API token (`xoxb-...`) |
+| `SLACK_LISTEN_CHANNELS` | Yes | Channel IDs to monitor |
+| `ALLOWED_USER_IDS` | Yes | Slack user IDs allowed to run commands |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Optional | For Claude Code CLI integration |
+| `ANTHROPIC_API_KEY` | Optional | For direct Anthropic API calls |
+
+### Useful Docker Commands
+
+```bash
+# Rebuild image after code changes
+docker compose build
+
+# View real-time logs
+docker compose logs -f
+
+# Stop containers
+docker compose down
+
+# Restart service
+docker compose restart slack-llm-runner
+
+# Shell into running container (debugging)
+docker compose exec slack-llm-runner bash
+
+# Remove volumes (careful: deletes data/logs/config!)
+docker compose down -v
+```
+
+### Note: Windows Development
+
+Windows developers should continue running natively with `npm run dev` (not Docker). The Docker setup targets Linux production environments only.
+
 ## 💬 Usage
 
 ### Shell Commands (Full Output)
@@ -237,6 +319,19 @@ jobs:
     cwd: "/path/to/project"
 ```
 
+## ✉️ Mail Triage Agent (built, not yet live)
+
+An optional email-triage capability layered on top of the runner: a scheduled job runs Claude Code restricted to a read-only `mailctl` CLI, which proposes actions (archive/move/flag/reply/delete) into a local SQLite queue. A human approves or rejects each one via Slack buttons; only an approval invokes a separate deterministic executor, which is the sole code path that ever writes to the mail server, via [Himalaya](https://github.com/pimalaya/himalaya). Claude never picks a recipient and never executes a write directly — see [`docs/development/CLAUDE.md`](docs/development/CLAUDE.md#mail-triage-agent) for the full design and enforcement principle.
+
+**Status:** all the code is written and unit/integration-tested (`src/mail/`, `bin/mailctl`), but it is **not wired into a running instance** — no session has connected it end-to-end against a real mailbox yet. To go live:
+
+1. Install [Himalaya](https://github.com/pimalaya/himalaya) (v2.1.0) and create `~/.config/himalaya/config.toml` with a real account — an app-password-based Gmail IMAP/SMTP entry for v1 (native Gmail OAuth isn't supported by Himalaya v2). See `docs/development/CLAUDE.md`'s Mail Triage Agent section for the config shape.
+2. Fill in `config/mail.yaml` (`imapAccount`, `digestChannel`, `dbPath`) — it currently exists only as a placeholder and is not yet read by `loadConfig()`.
+3. Wire `src/index.ts` to construct a `MailStore` and pass `mailStore`/`mailDbPath` into `registerListeners()` (`src/slack/listener.ts`) — without this, the `mail_approve`/`mail_reject` buttons never register.
+4. Wire an `onJsonResult` callback into the `SessionManager` constructor (`src/cli/runner.ts`) that renders the mail-triage job's captured JSON via `src/mail/digestRenderer.ts` and posts it with `SlackReporter.postBlocks()` — without this, the cron job runs but nothing ever reaches Slack.
+5. Uncomment the `morning-mail-triage` job in `config/jobs.yaml` and set a real `channel`.
+6. Test the full loop against a real (ideally disposable/test) mailbox before trusting it with a real inbox.
+
 ## 🔧 Development
 
 ### Project Structure
@@ -250,12 +345,17 @@ slack-cli-wrapper/
 │   ├── scheduler/        # Cron job scheduling
 │   ├── security/         # Authorization & command filtering
 │   ├── slack/            # Bolt app, listeners, reporter
+│   ├── mail/             # Mail-triage agent (mailctl, executor, SQLite store, digest renderer)
 │   └── utils/            # Config, logger, formatting
+├── bin/
+│   └── mailctl(.cmd)     # Shim so --allowedTools can match a literal `mailctl` on PATH
 ├── config/
 │   ├── prompts/          # System prompts for LLMs
+│   ├── schemas/          # JSON Schemas for structured CLI output (e.g. mail digest)
 │   ├── authorization.yaml
 │   ├── commands.yaml
-│   └── jobs.yaml
+│   ├── jobs.yaml
+│   └── mail.yaml         # Mail-triage config (not yet loaded — see Mail Triage Agent section)
 ├── scripts/debug/        # Manual debugging utilities
 └── test/                 # Automated tests
 ```
@@ -347,8 +447,10 @@ npm run dev
 - [ ] Web dashboard for session logs
 - [ ] More envelope types
 - [ ] Plugin system for custom handlers
-- [ ] Docker support
 - [ ] Windows/WSL improvements
+- [ ] Wire the Mail Triage Agent live (see the Go-Live checklist in its own section above)
+- [ ] Native Gmail OAuth support for the Mail Triage Agent (Himalaya v2 has no built-in OAuth flow)
+- [ ] `send` action kind for the Mail Triage Agent (net-new outbound mail — deliberately deferred, see `docs/development/CLAUDE.md`)
 
 ## 📚 Documentation
 

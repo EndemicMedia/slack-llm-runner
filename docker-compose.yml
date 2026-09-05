@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  slack-llm-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: slack-llm-runner
+    restart: unless-stopped
+
+    # Load environment variables from file
+    env_file:
+      - .env
+
+    # Additional environment variables (can override .env or add new ones)
+    environment:
+      NODE_ENV: production
+
+    # Volume mounts for persistent data and configuration
+    volumes:
+      # Configuration directory (bind-mounted so YAML edits don't require rebuild)
+      - ./config:/app/config
+
+      # Data directory (for databases, caches)
+      - ./data:/app/data
+
+      # Logs directory (for session and audit logs)
+      - ./logs:/app/logs
+
+      # (Future) Himalaya config volume
+      # Uncomment once mail-executor/himalaya is wired up and you have a config.toml
+      # - ./config/himalaya.toml:/app/config/himalaya.toml:ro
+
+    # Resource limits (optional, adjust based on your needs)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 512M
+        reservations:
+          cpus: '1'
+          memory: 256M
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('fs').existsSync('/app/dist/index.js') || process.exit(1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

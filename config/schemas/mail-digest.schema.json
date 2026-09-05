@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MailDigest",
+  "type": "object",
+  "required": ["summary", "items"],
+  "additionalProperties": false,
+  "properties": {
+    "summary": {
+      "type": "string",
+      "description": "Short human-readable summary of the inbox triage pass."
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sourceMessageId", "subject", "from", "analysis", "proposedActionId"],
+        "additionalProperties": false,
+        "properties": {
+          "sourceMessageId": {
+            "type": "string",
+            "description": "RFC Message-ID of the source email."
+          },
+          "subject": { "type": "string" },
+          "from": { "type": "string" },
+          "analysis": {
+            "type": "string",
+            "description": "Why this action is proposed."
+          },
+          "proposedActionId": {
+            "type": "string",
+            "description": "actionId of a ProposedAction row created via mailctl propose."
+          }
+        }
+      }
+    }
+  }
+}

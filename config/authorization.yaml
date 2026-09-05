@@ -5,4 +5,4 @@ rules:
   # wrapper-test channel - allows all configured users to run all commands
   - channels: ["C0ACQMYN1C7"]
     users: ["*"]
-    allowed_prefixes: ["claude", "kimi", "run"]
+    allowed_prefixes: ["claude", "kimi", "run", "mail-triage"]

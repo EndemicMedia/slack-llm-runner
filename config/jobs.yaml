@@ -7,3 +7,13 @@
 #     cwd: "C:\\path\\to\\project"
 #     label: "Backup Check"
 jobs: []
+
+# Uncomment once mail.yaml and himalaya are configured (real digestChannel,
+# a working mailctl/himalaya account, and the mail executor wired in):
+#   - name: "morning-mail-triage"
+#     kind: "command"
+#     commandPrefix: "mail-triage"
+#     commandArgs: "Triage the inbox: list unread mail, read anything actionable, and propose archive/flag/reply/delete actions via mailctl propose. Summarize as the required JSON schema."
+#     cron: "0 8 * * 1-5"
+#     channel: "CHANGE_ME"
+#     label: "Morning Mail Triage"

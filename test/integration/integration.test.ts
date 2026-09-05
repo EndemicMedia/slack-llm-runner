@@ -10,6 +10,10 @@ import { createLogger }     from '../../src/utils/logger.js';
 import { resolve }          from 'path';
 import { existsSync, readFileSync, rmSync } from 'fs';
 
+// `bash.exe` is Git for Windows' name on PATH; the equivalent shell on
+// Linux/macOS is plain `bash` — use whichever resolves on this platform.
+const bashBinary = process.platform === 'win32' ? 'bash.exe' : 'bash';
+
 const logger = createLogger('IntegrationTest');
 
 describe('Integration – spawn → OutputRouter → log capture', () => {
@@ -46,7 +50,7 @@ describe('Integration – spawn → OutputRouter → log capture', () => {
     await router.start();
 
     // Spawn the command: bash.exe -c 'echo hello-world'
-    const handle = await spawnProcess('bash.exe', ['-c', 'echo hello-world'], {
+    const handle = await spawnProcess(bashBinary, ['-c', 'echo hello-world'], {
       mode: 'one-shot',
       cwd:  process.cwd(),
     });
@@ -105,7 +109,7 @@ describe('Integration – spawn → OutputRouter → log capture', () => {
 
     await router.start();
 
-    const handle = await spawnProcess('bash.exe', ['-c', 'echo E2E_TEST_OUTPUT'], {
+    const handle = await spawnProcess(bashBinary, ['-c', 'echo E2E_TEST_OUTPUT'], {
       mode: 'one-shot',
       cwd: process.cwd(),
     });

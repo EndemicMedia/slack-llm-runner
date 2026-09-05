@@ -75,9 +75,35 @@ The EnvelopeParser has a configurable activation delay (default 1500ms for inter
 - `node-cron`: v4.2.1 (ESM-native). Use named imports: `import { schedule, validate } from 'node-cron'`.
 - `js-yaml`: v4. Use `import { load } from 'js-yaml'` (not `parse`).
 - `@types/js-yaml`: max 4.0.9 — do not use `^4.1.x`.
+- `better-sqlite3`: pinned to `^12.11.1`, **not** the latest v13.x. v13.0.0 dropped Node 20 support (`engines: "node": ">=22"`) and, on `windows-latest, 20.x` in CI, has no prebuilt binary for that ABI/platform combo — `npm ci` falls back to a from-source `node-gyp` build, which fails with no MSVC toolchain on the runner (this broke CI on PR #1; confirmed via the failing job log before downgrading). v12.11.1 explicitly declares support for `20.x || 22.x || 23.x || 24.x || 25.x || 26.x` and has prebuilds for the full ubuntu/windows/macos × 20.x/22.x CI matrix. Do not bump past v12.x while the CI matrix still includes Node 20. `@types/better-sqlite3` pinned to a matching major (`^7.6.13`).
 
 ## Environment
 
 - Platform: Windows. Bash available at `/usr/bin/bash` (Git Bash).
 - Socket Mode: only ONE active connection per app token. Kill all node processes before restarting (`taskkill /IM node.exe /F`).
 - The envelope prompt template is at `prompts/envelope-instructions.txt` — editable without code changes.
+
+## Mail Triage Agent
+
+An email-triage capability built on top of the runner: a cron job (`config/jobs.yaml`, `kind: "command"`, `commandPrefix: "mail-triage"`) runs Claude Code restricted to a read-only `mailctl` CLI (`src/mail/mailctl.ts`, shimmed at `bin/mailctl`), which proposes actions into a SQLite queue (`src/mail/threadStore.ts`, default `data/mail.db`). A human approves or rejects via Slack buttons (`src/slack/listener.ts`'s `mail_approve`/`mail_reject` handlers); only an approval invokes `src/mail/executor.ts`, the sole file that performs a real write to the mail server via [Himalaya](https://github.com/pimalaya/himalaya).
+
+**The enforcement principle**: Claude's mail permissions are restricted by `--allowedTools`/`--disallowedTools`/`--permission-mode` CLI flags (`CommandConfig` fields wired into `spawnArgs` in `src/cli/runner.ts`) and by what `mailctl` does not expose as a subcommand (no himalaya write verb, no recipient-supplying flag anywhere in its argument parser) — never by CLAUDE.md prose or prompt text alone, since permission rules are enforced by the Claude Code CLI itself, not by the model choosing to comply.
+
+**Himalaya setup** (not yet wired into `loadConfig()` — `config/mail.yaml` is a placeholder):
+- Version pinned to **v2.1.0**. Install via the official script: `curl -sSL https://raw.githubusercontent.com/pimalaya/himalaya/v2.1.0/install.sh | sh` (see `Dockerfile` for the containerized install). It is a Rust binary, **not** an npm package.
+- Config file: `~/.config/himalaya/config.toml` on Linux/macOS (or `$XDG_CONFIG_HOME/himalaya`), `%APPDATA%\himalaya` on Windows — mirror `process.platform === 'win32'` branching wherever a mail module needs this path (see `src/mail/himalayaClient.ts`'s `resolveConfigDir()`).
+- **v1 uses Gmail app-password IMAP/SMTP, not native Gmail OAuth.** Himalaya v2 ships no OAuth flow of its own — its native `gmail.auth.token.*` backend expects an already-valid bearer token from an external broker (e.g. [ortie](https://github.com/pimalaya/ortie)), which is out of scope for v1. Use an [app password](https://myaccount.google.com/apppasswords) with the generic IMAP/SMTP backend instead; see the plan's "Config additions" section for a worked `config.toml` example.
+- Secrets go through `password.cmd` (a shell command printing the secret to stdout — e.g. `pass show gmail/app-password` on Linux, or an equivalent Windows credential-store command), never `password.raw`.
+
+**Deferred to v2+** (see the plan at the time of writing for the full list): the `send` action kind (arbitrary-recipient outbound mail — the one action that would reintroduce a Claude-chosen recipient), native Gmail OAuth, multi-account support, a local pre-filter classifier, commitment/follow-up tracking.
+
+### Go-Live Checklist
+
+All of the mail-triage code is written and unit/integration-tested, but nothing wires it into a running instance yet — the pieces above exist without anything connecting them at startup. To actually turn it on:
+
+1. **Install Himalaya and create a real account config.** `~/.config/himalaya/config.toml` (or the Windows/`XDG_CONFIG_HOME` equivalent above) needs a real `[accounts.<name>]` block — an app-password Gmail IMAP/SMTP entry for v1, with `mailbox.alias.archive`/`trash`/etc. set to Gmail's special folder names. Nothing in this repo creates this file for you.
+2. **Fill in and load `config/mail.yaml`.** It exists today only as a placeholder (`imapAccount`, `digestChannel`, `dbPath`) and is not read by `src/utils/config.ts`'s `loadConfig()` — extend `AppConfig`/`loadConfig()` to actually parse it, matching the existing YAML-loading pattern for `commands.yaml`/`jobs.yaml`/`authorization.yaml`.
+3. **Wire `MailStore` into `src/index.ts`.** Construct a `MailStore` (from `src/mail/threadStore.ts`, using the `dbPath` from `mail.yaml`) at startup and pass it plus the resolved db path into `registerListeners(app, router, listenChannels, mailStore, mailDbPath)` (`src/slack/listener.ts`) — without this, the `mail_approve`/`mail_reject` buttons never get registered with Bolt, and clicking them does nothing (no error, just silence).
+4. **Wire an `onJsonResult` callback into `SessionManager`.** `src/cli/runner.ts`'s `SessionManager` constructor takes an optional 3rd param for this. The callback needs to: parse the mail-triage job's captured JSON as a `MailDigest`, call `renderDigestBlocks()` (`src/mail/digestRenderer.ts`) against the same `MailStore` instance, and post the result via `SlackReporter.postBlocks()`. Without this, the cron job runs Claude and populates `proposed_actions`, but nothing ever reaches Slack — the digest is silently dropped.
+5. **Uncomment the job.** `config/jobs.yaml`'s `morning-mail-triage` entry is commented out; uncomment it and set a real Slack `channel` ID (matching `mail.yaml`'s `digestChannel`).
+6. **Test end-to-end against a real mailbox** (ideally a disposable/test account first) — everything built so far is unit/integration-tested with Himalaya calls mocked or stubbed; no session has run the actual loop against a live inbox.

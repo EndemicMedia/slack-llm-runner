@@ -26,3 +26,17 @@ commands:
     mode: one-shot
     envelope: false
     description: "Run a bash command"
+
+  - prefix: "mail-triage"
+    binary: "${CLI_CLAUDE}"
+    args: ["--verbose"]
+    promptFlag: "-p"
+    mode: one-shot
+    envelope: false
+    outputFormat: "json"
+    jsonSchemaPath: "config/schemas/mail-digest.schema.json"
+    allowedTools: "Bash(mailctl:*)"
+    disallowedTools: ["Read", "Write", "Edit", "WebFetch", "Agent"]
+    permissionMode: "dontAsk"
+    maxTurns: 12
+    description: "Triage inbox and propose actions"

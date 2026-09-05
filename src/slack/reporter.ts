@@ -1,4 +1,5 @@
 import { WebClient } from '@slack/web-api';
+import type { KnownBlock } from '@slack/types';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('Reporter');
@@ -67,6 +68,26 @@ export class SlackReporter {
           }]
         }
       ]
+    });
+    return res.ts!;
+  }
+
+  /**
+   * Posts a message built from arbitrary Block Kit blocks (e.g. a mail
+   * digest with per-item Approve/Reject buttons).
+   * @returns The `ts` of the posted message (usable as thread_ts)
+   */
+  async postBlocks(
+    channelId: string,
+    blocks: KnownBlock[],
+    fallbackText: string,
+    threadTs?: string
+  ): Promise<string> {
+    const res = await this.client.chat.postMessage({
+      channel:   channelId,
+      text:      fallbackText, // Fallback text for notifications
+      thread_ts: threadTs,
+      blocks,
     });
     return res.ts!;
   }
