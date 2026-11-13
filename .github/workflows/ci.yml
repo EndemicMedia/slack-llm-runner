@@ -12,7 +12,7 @@ jobs:
 
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [[self-hosted, linux, x64], windows-latest, macos-latest]
         node-version: [20.x, 22.x]
 
     steps:
@@ -43,7 +43,7 @@ jobs:
         run: npm run build
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
 
     steps:
       - name: Checkout
@@ -71,7 +71,7 @@ jobs:
   all-checks-passed:
     name: All checks passed
     needs: [test, lint]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     if: always()
     steps:
       - name: Check if all jobs passed
